@@ -15,7 +15,7 @@ import torchvision
 import torchvision.transforms as transforms
 
 from models import *
-
+# from splitted_cifar100 import CIFAR100
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -42,7 +42,7 @@ def main():
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
 
-        model = resnet20_cifar()
+        # model = resnet20_cifar()
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
@@ -56,7 +56,7 @@ def main():
 
         # model = resneXt_cifar(depth=29, cardinality=16, baseWidth=64, num_classes=100)
         
-        #model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
+        model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
         # mkdir a new folder to store the checkpoint and best model
         if not os.path.exists('result'):
@@ -65,16 +65,17 @@ def main():
         if not os.path.exists(fdir):
             os.makedirs(fdir)
 
-        # adjust the lr according to the model type
-        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar)):
-            model_type = 1
-        elif isinstance(model, Wide_ResNet_Cifar):
-            model_type = 2
-        elif isinstance(model, (ResNeXt_Cifar, DenseNet_Cifar)):
-            model_type = 3
-        else:
-            print('model type unrecognized...')
-            return
+        # # adjust the lr according to the model type
+        # if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar)):
+        #     model_type = 1
+        # elif isinstance(model, Wide_ResNet_Cifar):
+        #     model_type = 2
+        # elif isinstance(model, (ResNeXt_Cifar, DenseNet_Cifar)):
+        #     model_type = 3
+        # else:
+        #     print('model type unrecognized...')
+        #     return
+        model_type = 3
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
@@ -127,7 +128,8 @@ def main():
     else:
         print('=> loading cifar100 data...')
         normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276])
-
+    
+        # train_dataset = CIFAR100(
         train_dataset = torchvision.datasets.CIFAR100(
             root='./data',
             train=True,
@@ -139,7 +141,8 @@ def main():
                 normalize,
             ]))
         trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-
+        
+        # test_dataset = CIFAR100(
         test_dataset = torchvision.datasets.CIFAR100(
             root='./data',
             train=False,
@@ -215,8 +218,10 @@ def train(trainloader, model, criterion, optimizer, epoch):
 
         # measure accuracy and record loss
         prec = accuracy(output.data, target)[0]
-        losses.update(loss.data[0], input.size(0))
-        top1.update(prec[0], input.size(0))
+        # losses.update(loss.data[0], input.size(0))
+        losses.update(loss.item(), input.size(0))
+        # top1.update(prec[0], input.size(0))
+        top1.update(prec.item(), input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
