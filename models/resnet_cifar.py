@@ -8,6 +8,7 @@ Reference:
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 
 
@@ -111,6 +112,8 @@ class PreActBasicBlock(nn.Module):
             residual = out      # Soonmin
 
         out = self.conv1(out)
+
+        out = F.dropout(out, 0.3, inplace=True)
 
         out = self.bn2(out)
         out = self.relu(out)

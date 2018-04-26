@@ -27,7 +27,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='man
 parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size (default: 128),only used for train')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
+parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
@@ -85,12 +85,12 @@ def main():
         # model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
         # mkdir a new folder to store the checkpoint and best model
-        if not os.path.exists('result'):
-            os.makedirs('result')
+        # if not os.path.exists('result'):
+        #     os.makedirs('result')
         # fdir = 'result/resnext_cifar100'
-        fdir = 'result/wide_resnet_20_10_cifar100'
-        if not os.path.exists(fdir):
-            os.makedirs(fdir)
+        # fdir = 'result/wide_resnet_20_10_cifar100'
+        # if not os.path.exists(fdir):
+        #     os.makedirs(fdir)
 
         # # adjust the lr according to the model type
         # if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar)):
@@ -111,7 +111,8 @@ def main():
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
-        optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        optimizer = optim.SGD(model.parameters(), args.lr, 
+            momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
         cudnn.benchmark = True
     else:
         print('Cuda is not available!')
@@ -190,8 +191,9 @@ def main():
         return
 
     # model type 3
-    milestones = [ 75, 90 ]    
-    optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+    # milestones = [ 75, 90 ]    
+    milestones = [ 60, 120, 160 ]  
+    optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.2)
     print('Milestones for LR schedulring: {}'.format(milestones))
 
 
@@ -217,7 +219,7 @@ def main():
             'state_dict': model.state_dict(),
             'best_prec': best_prec,
             'optimizer': optimizer.state_dict(),
-        }, is_best, fdir)
+        }, is_best, jobs_dir)
 
 
 class AverageMeter(object):
