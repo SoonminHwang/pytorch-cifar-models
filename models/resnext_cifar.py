@@ -111,7 +111,7 @@ class ResNeXt_Cifar(nn.Module):
 
 def resneXt_cifar(depth, cardinality, baseWidth, **kwargs):
     assert (depth - 2) % 9 == 0
-    n = (depth - 2) / 9
+    n = int( (depth - 2) / 9 )
     model = ResNeXt_Cifar(Bottleneck, [n, n, n], cardinality, baseWidth, **kwargs)
     return model
 

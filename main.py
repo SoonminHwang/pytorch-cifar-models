@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
+from torch.optim import lr_scheduler
 from torch.autograd import Variable
 
 
@@ -16,6 +17,9 @@ import torchvision.transforms as transforms
 
 from models import *
 # from splitted_cifar100 import CIFAR100
+from tensorboardX import SummaryWriter
+from datetime import datetime
+
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -28,8 +32,26 @@ parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', hel
 parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
 parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', help='10 for cifar10,100 for cifar100 (default: 10)')
+parser.add_argument('--jobs_dir', default='jobs/', type=str,  help='set if you want to use exp time')
+parser.add_argument('--exp_name', default=None, type=str,  help='set if you want to use exp name')
 
 best_prec = 0
+
+# writer = SummaryWriter(log_dir='log', comment='resNeXt_cifar100')
+current_time    = datetime.now()
+exp_time        = current_time.strftime('%Y-%m-%d_%Hh%Mm')
+exp_name        = '_' + args.exp_name if args.exp_name is not None else ''
+jobs_dir        = os.path.join( args.jobs_dir, exp_time + exp_name )
+
+logger          = logutil.getLogger()
+logutil.set_output_file( os.path.join(jobs_dir, 'log_%s.txt' % exp_time) )
+logutil.logging_run_info( vars(args) )
+
+writer          = SummaryWriter(log_dir=jobs_dir, comment='wide_resnet_cifar100')
+
+def print(msg):
+    logger.info(msg)
+
 
 def main():
     global args, best_prec
@@ -52,16 +74,17 @@ def main():
         # model = preact_resnet164_cifar(num_classes=100)
         # model = preact_resnet1001_cifar(num_classes=100)
 
-        # model = wide_resnet_cifar(depth=26, width=10, num_classes=100)
+        model = wide_resnet_cifar(depth=26, width=10, num_classes=100)
 
         # model = resneXt_cifar(depth=29, cardinality=16, baseWidth=64, num_classes=100)
         
-        model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
+        # model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
         # mkdir a new folder to store the checkpoint and best model
         if not os.path.exists('result'):
             os.makedirs('result')
-        fdir = 'result/resnet20_cifar10'
+        # fdir = 'result/resnext_cifar100'
+        fdir = 'result/wide_resnet_cifar100'
         if not os.path.exists(fdir):
             os.makedirs(fdir)
 
@@ -151,14 +174,21 @@ def main():
                 transforms.ToTensor(),
                 normalize,
             ]))
-        testloader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False, num_workers=2)
-
+        testloader = torch.utils.data.DataLoader(test_dataset, batch_size=50, shuffle=False, num_workers=2)
+    
     if args.evaluate:
         validate(testloader, model, criterion)
         return
 
+    # model type 3
+    milestones = [ 50, 75 ]    
+    optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+    print('Milestones for LR schedulring: {}'.format(milestones))
+
+
     for epoch in range(args.start_epoch, args.epochs):
-        adjust_learning_rate(optimizer, epoch, model_type)
+        # adjust_learning_rate(optimizer, epoch, model_type)
+        optim_scheduler.step()
 
         # train for one epoch
         train(trainloader, model, criterion, optimizer, epoch)
@@ -233,13 +263,20 @@ def train(trainloader, model, criterion, optimizer, epoch):
         end = time.time()
 
         if i % args.print_freq == 0:
+            for name, param in model.named_parameters():
+                writer.add_histogram(name, param.clone().cpu().data.numpy(), i)
+
+            writer.add_scalar('loss/train', loss.item(), i+(epoch-1)*len(trainloader) )
+            writer.add_scalar('top1/train', prec.item(), i+(epoch-1)*len(trainloader) )
+
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
-                   epoch, i, len(trainloader), batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1))
+                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'
+                  'LR {3:.4f}'.format(
+                   epoch, i, optim_scheduler.get_lr()[0], len(trainloader), 
+                   batch_time=batch_time, data_time=data_time, loss=losses, top1=top1))
 
 
 def validate(val_loader, model, criterion):
@@ -269,7 +306,7 @@ def validate(val_loader, model, criterion):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
+        if i % args.print_freq == 0:                
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -278,6 +315,8 @@ def validate(val_loader, model, criterion):
                    top1=top1))
 
     print(' * Prec {top1.avg:.3f}% '.format(top1=top1))
+    writer.add_scalar('loss/val', losses.avg, epoch*len(val_loader) )
+    writer.add_scalar('top1/val', top1.avg, epoch*len(val_loader) )
 
     return top1.avg
 
@@ -289,33 +328,33 @@ def save_checkpoint(state, is_best, fdir):
         shutil.copyfile(filepath, os.path.join(fdir, 'model_best.pth.tar'))
 
 
-def adjust_learning_rate(optimizer, epoch, model_type):
-    """For resnet, the lr starts from 0.1, and is divided by 10 at 80 and 120 epochs"""
-    if model_type == 1:
-        if epoch < 80:
-            lr = args.lr
-        elif epoch < 120:
-            lr = args.lr * 0.1
-        else:
-            lr = args.lr * 0.01
-    elif model_type == 2:
-        if epoch < 60:
-            lr = args.lr
-        elif epoch < 120:
-            lr = args.lr * 0.2
-        elif epoch < 160:
-            lr = args.lr * 0.04
-        else:
-            lr = args.lr * 0.008
-    elif model_type == 3:
-        if epoch < 150:
-            lr = args.lr
-        elif epoch < 225:
-            lr = args.lr * 0.1
-        else:
-            lr = args.lr * 0.01
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+# def adjust_learning_rate(optimizer, epoch, model_type):
+#     """For resnet, the lr starts from 0.1, and is divided by 10 at 80 and 120 epochs"""
+#     if model_type == 1:
+#         if epoch < 80:
+#             lr = args.lr
+#         elif epoch < 120:
+#             lr = args.lr * 0.1
+#         else:
+#             lr = args.lr * 0.01
+#     elif model_type == 2:
+#         if epoch < 60:
+#             lr = args.lr
+#         elif epoch < 120:
+#             lr = args.lr * 0.2
+#         elif epoch < 160:
+#             lr = args.lr * 0.04
+#         else:
+#             lr = args.lr * 0.008
+#     elif model_type == 3:
+#         if epoch < 150:
+#             lr = args.lr
+#         elif epoch < 225:
+#             lr = args.lr * 0.1
+#         else:
+#             lr = args.lr * 0.01
+#     for param_group in optimizer.param_groups:
+#         param_group['lr'] = lr
 
 
 def accuracy(output, target, topk=(1,)):
