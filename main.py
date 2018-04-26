@@ -19,7 +19,7 @@ from models import *
 # from splitted_cifar100 import CIFAR100
 from tensorboardX import SummaryWriter
 from datetime import datetime
-
+import logutil
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -35,6 +35,8 @@ parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT',
 parser.add_argument('--jobs_dir', default='jobs/', type=str,  help='set if you want to use exp time')
 parser.add_argument('--exp_name', default=None, type=str,  help='set if you want to use exp name')
 
+args = parser.parse_args()
+
 best_prec = 0
 
 # writer = SummaryWriter(log_dir='log', comment='resNeXt_cifar100')
@@ -42,6 +44,8 @@ current_time    = datetime.now()
 exp_time        = current_time.strftime('%Y-%m-%d_%Hh%Mm')
 exp_name        = '_' + args.exp_name if args.exp_name is not None else ''
 jobs_dir        = os.path.join( args.jobs_dir, exp_time + exp_name )
+args.exp_time   = exp_time
+if not os.path.exists(jobs_dir):    os.makedirs(jobs_dir)
 
 logger          = logutil.getLogger()
 logutil.set_output_file( os.path.join(jobs_dir, 'log_%s.txt' % exp_time) )
@@ -54,8 +58,7 @@ def print(msg):
 
 
 def main():
-    global args, best_prec
-    args = parser.parse_args()
+    global best_prec    
     use_gpu = torch.cuda.is_available()
 
     # Model building
@@ -74,7 +77,7 @@ def main():
         # model = preact_resnet164_cifar(num_classes=100)
         # model = preact_resnet1001_cifar(num_classes=100)
 
-        model = wide_resnet_cifar(depth=26, width=10, num_classes=100)
+        model = wide_resnet_cifar(depth=20, width=10, num_classes=100)
 
         # model = resneXt_cifar(depth=29, cardinality=16, baseWidth=64, num_classes=100)
         
@@ -84,7 +87,7 @@ def main():
         if not os.path.exists('result'):
             os.makedirs('result')
         # fdir = 'result/resnext_cifar100'
-        fdir = 'result/wide_resnet_cifar100'
+        fdir = 'result/wide_resnet_20_10_cifar100'
         if not os.path.exists(fdir):
             os.makedirs(fdir)
 
@@ -181,7 +184,7 @@ def main():
         return
 
     # model type 3
-    milestones = [ 50, 75 ]    
+    milestones = [ 75, 90 ]    
     optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
     print('Milestones for LR schedulring: {}'.format(milestones))
 
@@ -191,10 +194,14 @@ def main():
         optim_scheduler.step()
 
         # train for one epoch
-        train(trainloader, model, criterion, optimizer, epoch)
+        prec_, losses_ = train(trainloader, model, criterion, optimizer, epoch, optim_scheduler)        
 
         # evaluate on test set
-        prec = validate(testloader, model, criterion)
+        prec, losses = validate(testloader, model, criterion)
+
+        writer.add_scalars('top1-prec', {'train': prec_, 'val': prec}, epoch )
+        writer.add_scalars('loss', {'train': losses_, 'val': losses}, epoch )
+
 
         # remember best precision and save checkpoint
         is_best = prec > best_prec
@@ -225,7 +232,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def train(trainloader, model, criterion, optimizer, epoch):
+def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -266,17 +273,18 @@ def train(trainloader, model, criterion, optimizer, epoch):
             for name, param in model.named_parameters():
                 writer.add_histogram(name, param.clone().cpu().data.numpy(), i)
 
-            writer.add_scalar('loss/train', loss.item(), i+(epoch-1)*len(trainloader) )
-            writer.add_scalar('top1/train', prec.item(), i+(epoch-1)*len(trainloader) )
+            writer.add_scalar('loss/train', loss.item(), i+(epoch-1)*len(trainloader) )            
 
-            print('Epoch: [{0}][{1}/{2}]\t'
+            print('Epoch: [{0}][{:02d}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'
-                  'LR {3:.4f}'.format(
-                   epoch, i, optim_scheduler.get_lr()[0], len(trainloader), 
+                  'LR {learning_rate:.4f}'.format(
+                   epoch, i, len(trainloader), learning_rate=optim_scheduler.get_lr()[0],
                    batch_time=batch_time, data_time=data_time, loss=losses, top1=top1))
+
+    return top1.avg, losses.avg
 
 
 def validate(val_loader, model, criterion):
@@ -319,9 +327,9 @@ def validate(val_loader, model, criterion):
                         i, len(val_loader), batch_time=batch_time, loss=losses,
                         top1=top1))
 
-        print(' * Prec {top1.avg:.3f}% '.format(top1=top1))
+        print(' * Prec {top1.avg:.3f}% '.format(top1=top1))        
 
-    return top1.avg
+    return top1.avg, losses.avg
 
 
 def save_checkpoint(state, is_best, fdir):

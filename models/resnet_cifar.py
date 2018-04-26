@@ -100,13 +100,15 @@ class PreActBasicBlock(nn.Module):
         self.stride = stride
 
     def forward(self, x):
-        residual = x
+        # residual = x
 
         out = self.bn1(x)
         out = self.relu(out)
 
         if self.downsample is not None:
             residual = self.downsample(out)
+        else:
+            residual = out      # Soonmin
 
         out = self.conv1(out)
 

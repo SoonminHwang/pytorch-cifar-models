@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import math
-from .resnet_cifar import BasicBlock
+from .resnet_cifar import BasicBlock, PreActBasicBlock
 
 
 class Wide_ResNet_Cifar(nn.Module):
@@ -68,7 +68,8 @@ class Wide_ResNet_Cifar(nn.Module):
 def wide_resnet_cifar(depth, width, **kwargs):
     assert (depth - 2) % 6 == 0
     n = int( (depth - 2) / 6 )
-    return Wide_ResNet_Cifar(BasicBlock, [n, n, n], width, **kwargs)
+    # return Wide_ResNet_Cifar(BasicBlock, [n, n, n], width, **kwargs)
+    return Wide_ResNet_Cifar(PreActBasicBlock, [n, n, n], width, **kwargs)
 
 
 if __name__=='__main__':
