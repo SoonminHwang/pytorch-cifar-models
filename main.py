@@ -51,7 +51,8 @@ logger          = logutil.getLogger()
 logutil.set_output_file( os.path.join(jobs_dir, 'log_%s.txt' % exp_time) )
 logutil.logging_run_info( vars(args) )
 
-writer          = SummaryWriter(log_dir=jobs_dir, comment='wide_resnet_cifar100')
+if not os.path.exists('runs'):    os.makedirs('runs')
+writer          = SummaryWriter(log_dir= os.path.join('runs', exp_time + exp_name))
 
 def print(msg):
     logger.info(msg)
@@ -102,6 +103,11 @@ def main():
         #     print('model type unrecognized...')
         #     return
         model_type = 3
+
+        
+	# Updating for pytorch >= 0.4, https://github.com/lanpa/tensorboard-pytorch/pull/106
+        # dummy = torch.tensor( (1, 3, 32, 32) )
+        # writer.add_graph( model, (dummy,))
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
@@ -275,11 +281,11 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
 
             writer.add_scalar('loss/train', loss.item(), i+(epoch-1)*len(trainloader) )            
 
-            print('Epoch: [{0}][{:02d}/{2}]\t'
+            print('Epoch: [{:3d}][{:3d}/{:3d}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'
+                  'Loss {loss.val:2.4f} ({loss.avg:2.4f})\t'
+                  'Prec {top1.val:3.2f}% ({top1.avg:3.2f}%)\t'
                   'LR {learning_rate:.4f}'.format(
                    epoch, i, len(trainloader), learning_rate=optim_scheduler.get_lr()[0],
                    batch_time=batch_time, data_time=data_time, loss=losses, top1=top1))
@@ -322,8 +328,8 @@ def validate(val_loader, model, criterion):
             if i % args.print_freq == 0:
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
+                      'Loss {loss.val:2.4f} ({loss.avg:2.4f})\t'
+                      'Prec {top1.val:3.2f}% ({top1.avg:3.2f}%)'.format(
                         i, len(val_loader), batch_time=batch_time, loss=losses,
                         top1=top1))
 
