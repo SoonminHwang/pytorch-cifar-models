@@ -31,7 +31,7 @@ parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float, metavar=
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
-parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', help='10 for cifar10,100 for cifar100 (default: 10)')
+parser.add_argument('-ct', '--cifar-type', default='100', type=int, metavar='CT', help='10 for cifar10,100 for cifar100 (default: 10)')
 parser.add_argument('--jobs_dir', default='jobs/', type=str,  help='set if you want to use exp time')
 parser.add_argument('--exp_name', default=None, type=str,  help='set if you want to use exp name')
 
@@ -51,8 +51,10 @@ logger          = logutil.getLogger()
 logutil.set_output_file( os.path.join(jobs_dir, 'log_%s.txt' % exp_time) )
 logutil.logging_run_info( vars(args) )
 
-if not os.path.exists('runs'):    os.makedirs('runs')
-writer          = SummaryWriter(log_dir= os.path.join('runs', exp_time + exp_name))
+# if not os.path.exists('runs'):    os.makedirs('runs')
+# writer          = SummaryWriter(log_dir= os.path.join('runs', exp_time + exp_name))
+if not os.path.exists( os.path.join(jobs_dir, 'tensorboardX') ):    os.makedirs( os.path.join(jobs_dir, 'tensorboardX') )
+writer          = SummaryWriter(log_dir= os.path.join(jobs_dir, 'tensorboardX'))
 
 def print(msg):
     logger.info(msg)
@@ -78,9 +80,9 @@ def main():
         # model = preact_resnet164_cifar(num_classes=100)
         # model = preact_resnet1001_cifar(num_classes=100)
 
-        model = wide_resnet_cifar(depth=20, width=10, num_classes=100)
+        # model = wide_resnet_cifar(depth=20, width=10, num_classes=100)
 
-        # model = resneXt_cifar(depth=29, cardinality=16, baseWidth=64, num_classes=100)
+        model = resneXt_cifar(depth=29, cardinality=2, baseWidth=64, num_classes=100)
         
         # model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
@@ -112,7 +114,7 @@ def main():
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
         optimizer = optim.SGD(model.parameters(), args.lr, 
-            momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
+            momentum=args.momentum, weight_decay=args.weight_decay, nesterov=False)
         cudnn.benchmark = True
     else:
         print('Cuda is not available!')
@@ -191,9 +193,12 @@ def main():
         return
 
     # model type 3
-    # milestones = [ 75, 90 ]    
-    milestones = [ 60, 120, 160 ]  
-    optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.2)
+    # WRN
+    # milestones = [ 60, 120, 160 ]  
+    # optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.2)
+
+    milestones = [ 150, 225 ]    
+    optim_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
     print('Milestones for LR schedulring: {}'.format(milestones))
 
 
@@ -209,7 +214,7 @@ def main():
 
         writer.add_scalars('top1-prec', {'train': prec_, 'val': prec}, epoch )
         writer.add_scalars('loss', {'train': losses_, 'val': losses}, epoch )
-
+        writer.add_scalar('lr', optim_scheduler.get_lr()[0], epoch )
 
         # remember best precision and save checkpoint
         is_best = prec > best_prec
@@ -328,7 +333,7 @@ def validate(val_loader, model, criterion):
             end = time.time()
 
             if i % args.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
+                print('Test: [{:3d}/{:3d}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:2.4f} ({loss.avg:2.4f})\t'
                       'Prec {top1.val:3.2f}% ({top1.avg:3.2f}%)'.format(

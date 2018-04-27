@@ -113,7 +113,7 @@ class PreActBasicBlock(nn.Module):
 
         out = self.conv1(out)
 
-        out = F.dropout(out, 0.3, inplace=True)
+        out = F.dropout(out, p=0.3, training=self.training, inplace=True)
 
         out = self.bn2(out)
         out = self.relu(out)

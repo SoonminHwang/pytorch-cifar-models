@@ -71,11 +71,12 @@ class ResNeXt_Cifar(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                # n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                # m.weight.data.normal_(0, math.sqrt(2. / n))
+                init.kaiming_normal(m.weight.data, mode='fan_out')                        
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                m.bias.data.zero_()        
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
