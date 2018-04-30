@@ -60,6 +60,8 @@ writer          = SummaryWriter(log_dir= os.path.join(jobs_dir, 'tensorboardX'))
 def print(msg):
     logger.info(msg)
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def main():
     global best_prec    
@@ -85,6 +87,8 @@ def main():
 
         model = resneXt_cifar(depth=29, cardinality=2, baseWidth=64, num_classes=100)
         
+        print('Number of trainable parameters in the model: {:,d}'.format(
+            count_parameters(model)) )
         # model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
         # mkdir a new folder to store the checkpoint and best model
@@ -105,12 +109,12 @@ def main():
         # else:
         #     print('model type unrecognized...')
         #     return
-        model_type = 3
-
+        # model_type = 3
         
-	# Updating for pytorch >= 0.4, https://github.com/lanpa/tensorboard-pytorch/pull/106
-        # dummy = torch.tensor( (1, 3, 32, 32) )
-        # writer.add_graph( model, (dummy,))
+        # Updating for pytorch >= 0.4, https://github.com/lanpa/tensorboard-pytorch/pull/106
+        dummy = Variable( torch.randn( (args.batch_size, 1, 32, 32) ).cuda() )
+        dummy2 = Variable( torch.randn( (args.batch_size, 1, 32, 32) ).cuda() )
+        writer.add_graph( model.cuda(), (dummy, dummy2, ), {'R', 'B'})
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
@@ -267,7 +271,9 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
 
         # compute output
         # output = model(input)
-        output = model(R)
+
+        # output = model(R)
+        output = model(R, B)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -336,7 +342,8 @@ def validate(val_loader, model, criterion):
 
             # compute output
             # output = model(input)
-            output = model(R)
+            # output = model(R)
+            output = model(R, B)
             loss = criterion(output, target)
 
             # measure accuracy and record loss

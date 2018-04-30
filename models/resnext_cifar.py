@@ -66,7 +66,16 @@ class ResNeXt_Cifar(nn.Module):
         self.conv1 = nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block, 64, layers[0])
+
+        self.conv2 = nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.relu2 = nn.ReLU(inplace=True)
+
+        self.layer1 = self._make_layer(block, 64, layers[0])        
+
+        self.inplanes = 64
+
+        self.layer1_aux = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.avgpool = nn.AvgPool2d(8, stride=1)
@@ -81,7 +90,7 @@ class ResNeXt_Cifar(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()        
             elif isinstance(m, nn.Linear):
-                init.kaiming_normal(m.weight)
+                init.kaiming_normal_(m.weight)
                 m.bias.data.zero_()
 
     def _make_layer(self, block, planes, blocks, stride=1):
@@ -100,12 +109,21 @@ class ResNeXt_Cifar(nn.Module):
         
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, y):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
 
         x = self.layer1(x)
+
+        y = self.conv2(y)
+        y = self.bn2(y)
+        y = self.relu2(y)
+
+        y = self.layer1_aux(y)
+        
+        x = x + y
+
         x = self.layer2(x)
         x = self.layer3(x)
 
