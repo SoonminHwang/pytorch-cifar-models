@@ -15,6 +15,7 @@ from torch.autograd import Variable
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
+from custom_transforms import RandomChannelDrop
 
 from models import *
 from splitted_cifar100 import CIFAR100
@@ -139,59 +140,60 @@ def main():
 
     # Data loading and preprocessing
     # CIFAR10
-    if args.cifar_type == 10:
-        print('=> loading cifar10 data...')
-        normalize = transforms.Normalize(mean=[0.491, 0.482, 0.447], std=[0.247, 0.243, 0.262])
+    # if args.cifar_type == 10:
+    #     print('=> loading cifar10 data...')
+    #     normalize = transforms.Normalize(mean=[0.491, 0.482, 0.447], std=[0.247, 0.243, 0.262])
 
-        train_dataset = torchvision.datasets.CIFAR10(
-            root='./data', 
-            train=True, 
-            download=True,
-            transform=transforms.Compose([
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]))
-        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    #     train_dataset = torchvision.datasets.CIFAR10(
+    #         root='./data', 
+    #         train=True, 
+    #         download=True,
+    #         transform=transforms.Compose([
+    #             transforms.RandomCrop(32, padding=4),
+    #             transforms.RandomHorizontalFlip(),                
+    #             transforms.ToTensor(),
+    #             normalize,
+    #         ]))
+    #     trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-        test_dataset = torchvision.datasets.CIFAR10(
-            root='./data',
-            train=False,
-            download=True,
-            transform=transforms.Compose([
-                transforms.ToTensor(),
-                normalize,
-            ]))
-        testloader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False, num_workers=2)
-    # CIFAR100
-    else:
-        print('=> loading cifar100 data...')
-        normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276])
+    #     test_dataset = torchvision.datasets.CIFAR10(
+    #         root='./data',
+    #         train=False,
+    #         download=True,
+    #         transform=transforms.Compose([
+    #             transforms.ToTensor(),
+    #             normalize,
+    #         ]))
+    #     testloader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False, num_workers=2)
+    # # CIFAR100
+    # else:
+    print('=> loading cifar100 data...')
+    normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276])
+        
+    # train_dataset = torchvision.datasets.CIFAR100(
+    train_dataset = CIFAR100(
+        root='./data',
+        train=True,
+        download=True,
+        transform=transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),                
+            RandomChannelDrop(),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+    trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
             
-        # train_dataset = torchvision.datasets.CIFAR100(
-        train_dataset = CIFAR100(
-            root='./data',
-            train=True,
-            download=True,
-            transform=transforms.Compose([
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),                
-                transforms.ToTensor(),
-                normalize,
-            ]))
-        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-                
-        # test_dataset = torchvision.datasets.CIFAR100(
-        test_dataset = CIFAR100(
-            root='./data',
-            train=False,
-            download=True,
-            transform=transforms.Compose([                
-                transforms.ToTensor(),
-                normalize,
-            ]))
-        testloader = torch.utils.data.DataLoader(test_dataset, batch_size=50, shuffle=False, num_workers=2)
+    # test_dataset = torchvision.datasets.CIFAR100(
+    test_dataset = CIFAR100(
+        root='./data',
+        train=False,
+        download=True,
+        transform=transforms.Compose([                
+            transforms.ToTensor(),
+            normalize,
+        ]))
+    testloader = torch.utils.data.DataLoader(test_dataset, batch_size=50, shuffle=False, num_workers=2)
 
     if args.evaluate:
         validate(testloader, model, criterion)
@@ -215,7 +217,7 @@ def main():
         prec_, losses_ = train(trainloader, model, criterion, optimizer, epoch, optim_scheduler)        
 
         # evaluate on test set
-        prec, losses = validate(testloader, model, criterion)
+        prec, losses = validate(testloader, model, criterion, epoch)
 
         writer.add_scalars('top1-prec', {'train': prec_, 'val': prec}, epoch )
         writer.add_scalars('loss', {'train': losses_, 'val': losses}, epoch )
@@ -299,7 +301,7 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
             for name, param in model.named_parameters():
                 writer.add_histogram(name, param.clone().cpu().data.numpy(), i)
 
-            writer.add_scalar('loss/train', loss.item(), i+(epoch-1)*len(trainloader) )            
+            writer.add_scalar('loss/train', loss.item(), i+epoch*len(trainloader) )            
 
             print('Epoch: [{:3d}][{:3d}/{:3d}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -310,18 +312,18 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
                    epoch, i, len(trainloader), learning_rate=optim_scheduler.get_lr()[0],
                    batch_time=batch_time, data_time=data_time, loss=losses, top1=top1))
 
-        if i % args.print_freq*10 == 0:
-            x = vutils.make_grid(R.cpu()[:4,...], normalize=True, scale_each=True)
-            writer.add_image('R/train', x, i)            
-            x = vutils.make_grid(G.cpu()[:4,...], normalize=True, scale_each=True)
-            writer.add_image('G/train', x, i)            
-            x = vutils.make_grid(B.cpu()[:4,...], normalize=True, scale_each=True)
-            writer.add_image('B/train', x, i)
+        if i == 0:
+            x = vutils.make_grid(R.cpu()[:10,...], normalize=True, scale_each=True)
+            writer.add_image('R/train', x, epoch)            
+            x = vutils.make_grid(G.cpu()[:10,...], normalize=True, scale_each=True)
+            writer.add_image('G/train', x, epoch)
+            x = vutils.make_grid(B.cpu()[:10,...], normalize=True, scale_each=True)
+            writer.add_image('B/train', x, epoch)
 
     return top1.avg, losses.avg
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, epoch):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -368,13 +370,13 @@ def validate(val_loader, model, criterion):
                         i, len(val_loader), batch_time=batch_time, loss=losses,
                         top1=top1))
 
-            if i % args.print_freq*10 == 0:
-                x = vutils.make_grid(R.cpu()[:4,...], normalize=True, scale_each=True)
-                writer.add_image('R/val', x, i)            
-                x = vutils.make_grid(G.cpu()[:4,...], normalize=True, scale_each=True)
-                writer.add_image('G/val', x, i)            
-                x = vutils.make_grid(B.cpu()[:4,...], normalize=True, scale_each=True)
-                writer.add_image('B/val', x, i)
+            if i == 0:
+                x = vutils.make_grid(R.cpu()[:10,...], normalize=True, scale_each=True)
+                writer.add_image('R/val', x, epoch)            
+                x = vutils.make_grid(G.cpu()[:10,...], normalize=True, scale_each=True)
+                writer.add_image('G/val', x, epoch)
+                x = vutils.make_grid(B.cpu()[:10,...], normalize=True, scale_each=True)
+                writer.add_image('B/val', x, epoch)
 
         print(' * Prec {top1.avg:.3f}% '.format(top1=top1))        
 
