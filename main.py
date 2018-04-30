@@ -14,9 +14,10 @@ from torch.autograd import Variable
 
 import torchvision
 import torchvision.transforms as transforms
+import torchvision.utils as vutils
 
 from models import *
-# from splitted_cifar100 import CIFAR100
+from splitted_cifar100 import CIFAR100
 from tensorboardX import SummaryWriter
 from datetime import datetime
 import logutil
@@ -163,28 +164,26 @@ def main():
     else:
         print('=> loading cifar100 data...')
         normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276])
-    
-        # train_dataset = CIFAR100(
-        train_dataset = torchvision.datasets.CIFAR100(
+            
+        # train_dataset = torchvision.datasets.CIFAR100(
+        train_dataset = CIFAR100(
             root='./data',
             train=True,
             download=True,
             transform=transforms.Compose([
                 transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.Grayscale(),
+                transforms.RandomHorizontalFlip(),                
                 transforms.ToTensor(),
                 normalize,
             ]))
         trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-        
-        # test_dataset = CIFAR100(
-        test_dataset = torchvision.datasets.CIFAR100(
+                
+        # test_dataset = torchvision.datasets.CIFAR100(
+        test_dataset = CIFAR100(
             root='./data',
             train=False,
             download=True,
-            transform=transforms.Compose([
-                transforms.Grayscale(),
+            transform=transforms.Compose([                
                 transforms.ToTensor(),
                 normalize,
             ]))
@@ -256,24 +255,30 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
     model.train()
 
     end = time.time()
-    for i, (input, target) in enumerate(trainloader):
+    # for i, (input, target) in enumerate(trainloader):
+    for i, (B, G, R, target) in enumerate(trainloader):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        input, target = input.cuda(), target.cuda()
+        # input, target = input.cuda(), target.cuda()
+        B, G, R, target = B.cuda(), G.cuda(), R.cuda(), target.cuda()
         # input_var = Variable(input)
         # target_var = Variable(target)        
 
         # compute output
-        output = model(input)
+        # output = model(input)
+        output = model(R)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
         prec = accuracy(output.data, target)[0]
+        losses.update(loss.item(), R.size(0))
+        top1.update(prec.item(), R.size(0))
+
         # losses.update(loss.data[0], input.size(0))
-        losses.update(loss.item(), input.size(0))
+        # losses.update(loss.item(), input.size(0))
         # top1.update(prec[0], input.size(0))
-        top1.update(prec.item(), input.size(0))
+        # top1.update(prec.item(), input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -299,6 +304,14 @@ def train(trainloader, model, criterion, optimizer, epoch, optim_scheduler):
                    epoch, i, len(trainloader), learning_rate=optim_scheduler.get_lr()[0],
                    batch_time=batch_time, data_time=data_time, loss=losses, top1=top1))
 
+        if i % args.print_freq*10 == 0:
+            x = vutils.make_grid(R.cpu()[:4,...], normalize=True, scale_each=True)
+            writer.add_image('R/train', x, i)            
+            x = vutils.make_grid(G.cpu()[:4,...], normalize=True, scale_each=True)
+            writer.add_image('G/train', x, i)            
+            x = vutils.make_grid(B.cpu()[:4,...], normalize=True, scale_each=True)
+            writer.add_image('B/train', x, i)
+
     return top1.avg, losses.avg
 
 
@@ -313,22 +326,28 @@ def validate(val_loader, model, criterion):
     end = time.time()
 
     with torch.no_grad():
-        for i, (input, target) in enumerate(val_loader):        
-            input, target = input.cuda(), target.cuda()
+        # for i, (input, target) in enumerate(val_loader):        
+        for i, (B, G, R, target) in enumerate(val_loader):        
+            # input, target = input.cuda(), target.cuda()
+            B, G, R, target = B.cuda(), G.cuda(), R.cuda(), target.cuda()
 
             # input_var = Variable(input, volatile=True)
             # target_var = Variable(target, volatile=True)
 
             # compute output
-            output = model(input)
+            # output = model(input)
+            output = model(R)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
             prec = accuracy(output.data, target)[0]
+            losses.update(loss.item(), R.size(0))
+            top1.update(prec.item(), R.size(0))
+
             # losses.update(loss.data[0], input.size(0))
             # top1.update(prec[0], input.size(0))
-            losses.update(loss.item(), input.size(0))
-            top1.update(prec.item(), input.size(0))
+            # losses.update(loss.item(), input.size(0))
+            # top1.update(prec.item(), input.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -341,6 +360,14 @@ def validate(val_loader, model, criterion):
                       'Prec {top1.val:3.2f}% ({top1.avg:3.2f}%)'.format(
                         i, len(val_loader), batch_time=batch_time, loss=losses,
                         top1=top1))
+
+            if i % args.print_freq*10 == 0:
+                x = vutils.make_grid(R.cpu()[:4,...], normalize=True, scale_each=True)
+                writer.add_image('R/val', x, i)            
+                x = vutils.make_grid(G.cpu()[:4,...], normalize=True, scale_each=True)
+                writer.add_image('G/val', x, i)            
+                x = vutils.make_grid(B.cpu()[:4,...], normalize=True, scale_each=True)
+                writer.add_image('B/val', x, i)
 
         print(' * Prec {top1.avg:.3f}% '.format(top1=top1))        
 

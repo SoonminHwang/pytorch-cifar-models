@@ -10,7 +10,7 @@ else:
     import pickle
 
 import torch.utils.data as data
-from .utils import download_url, check_integrity
+from torchvision.datasets.utils import download_url, check_integrity
 
 # def CIFAR_collate(batch):
 #     """Custom collate fn for dealing with batches of images that have a different
@@ -145,7 +145,8 @@ class CIFAR10(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return img, target
+        # return img, target
+        return img[0:1,...], img[1:2,...], img[2:3,...], target
 
     def __len__(self):
         if self.train:
