@@ -172,6 +172,7 @@ def main():
             transform=transforms.Compose([
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
+                transforms.Grayscale(),
                 transforms.ToTensor(),
                 normalize,
             ]))
@@ -183,6 +184,7 @@ def main():
             train=False,
             download=True,
             transform=transforms.Compose([
+                transforms.Grayscale(),
                 transforms.ToTensor(),
                 normalize,
             ]))
