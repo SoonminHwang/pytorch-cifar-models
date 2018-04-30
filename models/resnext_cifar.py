@@ -7,7 +7,9 @@ Reference:
 
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 from torch.autograd import Variable
+import torch.nn.functional as F
 import math
 
 
@@ -60,7 +62,8 @@ class ResNeXt_Cifar(nn.Module):
         self.inplanes = 64
         self.cardinality = cardinality
         self.baseWidth = baseWidth
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        # self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -71,12 +74,15 @@ class ResNeXt_Cifar(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                # n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                # m.weight.data.normal_(0, math.sqrt(2. / n))
-                init.kaiming_normal(m.weight.data, mode='fan_out')                        
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+                # init.kaiming_normal(m.weight.data, mode='fan_out')                        
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()        
+            elif isinstance(m, nn.Linear):
+                init.kaiming_normal(m.weight)
+                m.bias.data.zero_()
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -104,7 +110,9 @@ class ResNeXt_Cifar(nn.Module):
         x = self.layer3(x)
 
         x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+
+        x = x.view(x.size(0), -1)        
+        # x = F.dropout(x, p=0.3, training=self.training, inplace=True)        
         x = self.fc(x)
 
         return x
